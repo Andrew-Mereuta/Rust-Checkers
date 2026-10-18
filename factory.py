@@ -55,7 +55,13 @@ def verify(workspace):
 
 
 def main():
-    task = (ROOT / sys.argv[1]).read_text()
+    if len(sys.argv) != 2:
+        sys.exit("Usage: python3 factory.py <task-file>")
+
+    task_path = ROOT / sys.argv[1]
+    task = task_path.read_text()
+    if not task.strip():
+        sys.exit(f"Task file is empty: {task_path}")
 
     run_id = uuid4().hex
     workspace = ROOT.parent / f"checkers-agent-{run_id}"
