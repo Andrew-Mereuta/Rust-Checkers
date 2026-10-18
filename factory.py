@@ -2,6 +2,7 @@
 from pathlib import Path
 import subprocess
 import sys
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parent
 
@@ -56,8 +57,9 @@ def verify(workspace):
 def main():
     task = (ROOT / sys.argv[1]).read_text()
 
-    workspace = ROOT.parent / "checkers-agent-001"
-    branch = "factory/task-001"
+    run_id = uuid4().hex
+    workspace = ROOT.parent / f"checkers-agent-{run_id}"
+    branch = f"factory/task-{run_id}"
 
     result = run([
         "git", "worktree", "add",
