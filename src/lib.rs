@@ -4,6 +4,8 @@
 //! and plays first. Red starts on rows 5–7 and moves toward row 0. Captures
 //! are mandatory; a move includes every jump. Crowning ends the turn.
 
+use std::collections::HashMap;
+
 pub const BOARD_SIZE: usize = 8;
 pub type Board = [[Option<Piece>; BOARD_SIZE]; BOARD_SIZE];
 
@@ -99,6 +101,9 @@ impl Move {
 pub enum GameStatus {
     InProgress,
     Won(Player),
+    /// The same position occurred three times, or each player made 40 moves
+    /// without advancing a man or capturing a piece.
+    Draw,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -122,6 +127,8 @@ pub struct Game {
     board: Board,
     turn: Player,
     status: GameStatus,
+    position_counts: HashMap<(Board, Player), u8>,
+    quiet_moves: usize,
 }
 
 impl Default for Game {
@@ -152,6 +159,8 @@ impl Game {
             board,
             turn: Player::Black,
             status: GameStatus::InProgress,
+            position_counts: HashMap::from([((board, Player::Black), 1)]),
+            quiet_moves: 0,
         }
     }
 
@@ -167,6 +176,8 @@ impl Game {
             board,
             turn,
             status,
+            position_counts: HashMap::from([((board, turn), 1)]),
+            quiet_moves: 0,
         }
     }
 
@@ -220,8 +231,11 @@ impl Game {
         let mut piece = self.board[start.row][start.col]
             .take()
             .expect("legal moves start at a piece");
+        let advanced_man = piece.rank == Rank::Man;
+        let mut captured = false;
         for pair in requested.path.windows(2) {
             if pair[0].row.abs_diff(pair[1].row) == 2 {
+                captured = true;
                 let middle = Position {
                     row: (pair[0].row + pair[1].row) / 2,
                     col: (pair[0].col + pair[1].col) / 2,
@@ -236,6 +250,21 @@ impl Game {
         self.turn = self.turn.opponent();
         if moves_for(&self.board, self.turn).is_empty() {
             self.status = GameStatus::Won(self.turn.opponent());
+        } else {
+            self.quiet_moves = if advanced_man || captured {
+                0
+            } else {
+                self.quiet_moves + 1
+            };
+            let count = self
+                .position_counts
+                .entry((self.board, self.turn))
+                .or_default();
+            *count += 1;
+            // Forty moves by each player are 80 completed turns.
+            if *count == 3 || self.quiet_moves == 80 {
+                self.status = GameStatus::Draw;
+            }
         }
         Ok(())
     }

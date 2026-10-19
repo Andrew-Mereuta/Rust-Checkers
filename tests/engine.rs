@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use rust_checkers::{Board, Game, GameStatus, Move, MoveError, Piece, Player, Position, Rank};
 
 fn p(row: usize, col: usize) -> Position {
@@ -213,6 +215,98 @@ fn no_moves_or_pieces_ends_game() {
         Game::from_board(empty(), Player::Red).status(),
         GameStatus::Won(Player::Black)
     );
+}
+
+#[test]
+fn move_that_blocks_every_opposing_piece_wins() {
+    let mut board = empty();
+    board[1][0] = Some(Piece::king(Player::Black));
+    board[0][3] = Some(Piece::man(Player::Black));
+    board[2][1] = Some(Piece::man(Player::Black));
+    board[1][2] = Some(Piece::man(Player::Red));
+    let mut game = Game::from_board(board, Player::Black);
+    assert_eq!(
+        Game::from_board(board, Player::Red).status(),
+        GameStatus::InProgress
+    );
+
+    game.apply_move(&m(&[(1, 0), (0, 1)])).unwrap();
+    assert_eq!(game.piece_at(p(1, 2)), Some(Piece::man(Player::Red)));
+    assert_eq!(game.status(), GameStatus::Won(Player::Black));
+    assert!(game.legal_moves().is_empty());
+}
+
+#[test]
+fn third_occurrence_of_same_position_is_a_draw() {
+    let mut board = empty();
+    board[0][1] = Some(Piece::king(Player::Black));
+    board[7][6] = Some(Piece::king(Player::Red));
+    let mut game = Game::from_board(board, Player::Black);
+    let cycle = [
+        m(&[(0, 1), (1, 2)]),
+        m(&[(7, 6), (6, 5)]),
+        m(&[(1, 2), (0, 1)]),
+        m(&[(6, 5), (7, 6)]),
+    ];
+    for move_number in 0..8 {
+        game.apply_move(&cycle[move_number % cycle.len()]).unwrap();
+        assert_eq!(
+            game.status(),
+            if move_number == 7 {
+                GameStatus::Draw
+            } else {
+                GameStatus::InProgress
+            }
+        );
+    }
+    assert_eq!(game.apply_move(&cycle[0]), Err(MoveError::GameOver));
+    assert!(game.legal_moves().is_empty());
+}
+
+#[test]
+fn eighty_king_moves_without_capture_are_a_draw() {
+    let mut board = empty();
+    board[0][1] = Some(Piece::king(Player::Black));
+    board[0][5] = Some(Piece::king(Player::Black));
+    board[7][2] = Some(Piece::king(Player::Red));
+    board[7][6] = Some(Piece::king(Player::Red));
+    let mut game = Game::from_board(board, Player::Black);
+    let mut seen = HashMap::from([((board, Player::Black), 1)]);
+    let mut random = 62_u64;
+    for move_number in 0..80 {
+        let candidates: Vec<_> = game
+            .legal_moves()
+            .into_iter()
+            .filter(|mv| mv.path[0].row.abs_diff(mv.path[1].row) == 1)
+            .filter(|mv| {
+                let mut next = game.clone();
+                next.apply_move(mv).unwrap();
+                let visits = seen
+                    .get(&(*next.board(), next.current_player()))
+                    .copied()
+                    .unwrap_or(0);
+                visits < 2 && (next.status() == GameStatus::InProgress || move_number == 79)
+            })
+            .collect();
+        assert!(!candidates.is_empty(), "move {move_number}");
+        random ^= random << 13;
+        random ^= random >> 7;
+        random ^= random << 17;
+        let selected = &candidates[(random as usize) % candidates.len()];
+        game.apply_move(selected).unwrap();
+        *seen
+            .entry((*game.board(), game.current_player()))
+            .or_insert(0) += 1;
+        assert_eq!(
+            game.status(),
+            if move_number == 79 {
+                GameStatus::Draw
+            } else {
+                GameStatus::InProgress
+            },
+            "move {move_number}"
+        );
+    }
 }
 
 #[test]
