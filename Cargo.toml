@@ -1,5 +1,5 @@
 [package]
-name = "Rust-Checkers"
+name = "rust-checkers"
 version = "0.1.0"
 edition = "2024"
 

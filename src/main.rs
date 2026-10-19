@@ -1,3 +1,3 @@
 fn main() {
-    println!("Hello, world!");
+    println!("Rust Checkers engine: use the library API to play a game.");
 }
